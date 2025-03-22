@@ -4,9 +4,14 @@ defmodule OurskyClient.Sda do
   """
   alias OurskyClient.Sda.SatelliteTarget
   alias OurskyClient.Sda.OrganizationTarget
+  alias OurskyClient.Sda.Node
+  alias OurskyClient.Sda.ObservationSequenceResult
+  alias OurskyClient.Sda.ObservationResult
+  alias OurskyClient.Sda.ImageSet
 
   defp parse_satellite_target(target) do
     {:ok, epoch, 0} = DateTime.from_iso8601(target["tleEpoch"])
+
     %SatelliteTarget{
       id: target["id"],
       norad_id: target["noradId"],
@@ -37,7 +42,7 @@ defmodule OurskyClient.Sda do
     }
   end
 
-  @doc"""
+  @doc """
   Get target information for a given NORAD ID
 
   ## Examples
@@ -76,18 +81,24 @@ defmodule OurskyClient.Sda do
       ]}
   """
   def get_targets_by_norad_id(norad_id) do
-    response = Req.get!("https://api.prod.oursky.ai/v1/satellite-targets?noradId=" <> norad_id, auth: {:bearer, Application.get_env(:oursky_client, :access_token)})
+    response =
+      Req.get!("https://api.prod.oursky.ai/v1/satellite-targets?noradId=" <> norad_id,
+        auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+      )
+
     case response.status do
       200 ->
-        {:ok, for target <- response.body["targets"] do
-          parse_satellite_target(target)
-        end}
+        {:ok,
+         for target <- response.body["targets"] do
+           parse_satellite_target(target)
+         end}
+
       _ ->
         {:error, response.body}
     end
   end
 
-  @doc"""
+  @doc """
   Task a target to be observed given a UUID (OurSky uses immutable UUIDs for each target- these can be retrieved using the get_targets_by_norad_id function)
 
   Returns an `OrganizationTarget` (`SatelliteTarget` + tasking information)
@@ -132,27 +143,34 @@ defmodule OurskyClient.Sda do
       }}
   """
   def task_observations_on_target(oursky_target_uuid) do
-    response = "https://api.prod.oursky.ai/v1/organization-target"
-      |> Req.post!(json: %{
-        satelliteTargetId: oursky_target_uuid,
-      }, auth: {:bearer, Application.get_env(:oursky_client, :access_token)})
+    response =
+      "https://api.prod.oursky.ai/v1/organization-target"
+      |> Req.post!(
+        json: %{
+          satelliteTargetId: oursky_target_uuid
+        },
+        auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+      )
 
     case response.status do
       200 ->
         {:ok, created_at, 0} = DateTime.from_iso8601(response.body["createdAt"])
-        {:ok, %OrganizationTarget{
-          created_at: created_at,
-          created_by: response.body["createdBy"],
-          id: response.body["id"],
-          revisit_rate_minutes: response.body["revisitRateMinutes"],
-          satellite_target: parse_satellite_target(response.body["satelliteTarget"])
-        }}
+
+        {:ok,
+         %OrganizationTarget{
+           created_at: created_at,
+           created_by: response.body["createdBy"],
+           id: response.body["id"],
+           revisit_rate_minutes: response.body["revisitRateMinutes"],
+           satellite_target: parse_satellite_target(response.body["satelliteTarget"])
+         }}
+
       _ ->
         {:error, response.body}
     end
   end
 
-  @doc"""
+  @doc """
   Untask a target given its UUID.
 
   ## Examples
@@ -161,11 +179,126 @@ defmodule OurskyClient.Sda do
       {:ok, %{"id" => "333afd5e-9b4e-4811-8a18-fde7b2604fce}}
   """
   def untask_target(oursky_target_uuid) do
-    response = "https://api.prod.oursky.ai/v1/organization-target?satelliteTargetId=" <> oursky_target_uuid
+    response =
+      ("https://api.prod.oursky.ai/v1/organization-target?satelliteTargetId=" <>
+         oursky_target_uuid)
       |> Req.delete!(auth: {:bearer, Application.get_env(:oursky_client, :access_token)})
+
     case response.status do
       200 ->
         {:ok, response.body}
+
+      _ ->
+        {:error, response.body}
+    end
+  end
+
+  @doc """
+  Get node properties given a node's UUID (found in observation sequence results)
+
+  ## Examples
+      iex> OurskyClient.Sda.get_node_properties("3be53422-5c54-413c-9a54-2a8e73c0ed27")
+      {:ok,
+      %OurskyClient.Sda.Node{
+        id: "3be53422-5c54-413c-9a54-2a8e73c0ed27",
+        gps_timestamps: false,
+        location: %{latitude: 52.200239, longitude: 6.857524, altitude: 30.0},
+        mount_type: "EQUITORIAL",
+        ota_aperture_mm: 207,
+        ota_focal_length_mm: 831,
+        pixel_size_microns: 4.78,
+        focuser_travel_distance_mm: nil,
+        shutter_type: "ROLLING",
+        megapixels: 16.236096
+      }}
+  """
+  def get_node_properties(node_uuid) do
+    response =
+      Req.get!("https://api.prod.oursky.ai/v1/node-properties?nodeId=#{node_uuid}",
+        auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+      )
+
+    case response.status do
+      200 ->
+        {:ok,
+         %Node{
+           id: node_uuid,
+           gps_timestamps: response.body["gpsTimestamps"],
+           location: %{
+             latitude: response.body["location"]["latitude"],
+             longitude: response.body["location"]["longitude"],
+             altitude: response.body["location"]["altitude"]
+           },
+           mount_type: response.body["mountType"],
+           ota_aperture_mm: response.body["otaApertureMm"],
+           ota_focal_length_mm: response.body["otaFocalLengthMm"],
+           pixel_size_microns: response.body["pixelSizeMicrons"],
+           focuser_travel_distance_mm: response.body["focuserTravelDistanceMm"],
+           shutter_type: response.body["shutterType"],
+           megapixels: response.body["megapixels"]
+         }}
+
+      _ ->
+        {:error, response.body}
+    end
+  end
+
+  @doc """
+  Get observation sequence results given a target's UUID (found in tasking)
+  """
+  def get_observation_sequence_results(target_uuid) do
+    response =
+      Req.get!("https://api.prod.oursky.ai/v1/observation-sequence-results?targetId=#{target_uuid}",
+        auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+      )
+
+    case response.status do
+      200 ->
+        osrs = response.body
+        IO.inspect(osrs)
+        {:ok,
+         for osr <- osrs do
+           {:ok, created_at, 0} = DateTime.from_iso8601(osr["createdAt"])
+
+           %ObservationSequenceResult{
+             id: osr["id"],
+             created_at: created_at,
+             created_by: osr["createdBy"],
+             generated_tle_line_1: osr["generatedTleLine1"],
+             generated_tle_line_2: osr["generatedTleLine2"],
+             image_sets: for(image_set <- osr["imageSets"]) do
+               %ImageSet{
+                 id: image_set["id"],
+                 node_id: image_set["nodeId"],
+                 observation_results: for(observation_result <- image_set["observationResults"]) do
+                    {:ok, timestamp, 0} = DateTime.from_iso8601(observation_result["timestamp"])
+                   %ObservationResult{
+                     apparent_magnitude: observation_result["apparentMagnitude"],
+                     astrometric_offsets: observation_result["astrometricOffsets"],
+                     bounding_box: observation_result["boundingBox"],
+                     corrected_dec: observation_result["correctedDec"],
+                     corrected_ra: observation_result["correctedRa"],
+                     dec: observation_result["dec"],
+                     distance_from_prediction: observation_result["distanceFromPrediction"],
+                     features: observation_result["features"],
+                     geolat: image_set["geolat"],
+                     geolon: image_set["geolon"],
+                     image_id: image_set["imageId"],
+                     image_url: image_set["imageUrl"],
+                     jpg_url: image_set["jpgUrl"],
+                     ra: observation_result["ra"],
+                     solar_eq_phase_angle: observation_result["solarEqPhaseAngle"],
+                     solar_phase_angle: observation_result["solarPhaseAngle"],
+                     timestamp: timestamp,
+                     timing_accuracy: observation_result["timingAccuracy"],
+                   }
+                 end
+               }
+             end,
+             norad_id: osr["noradId"],
+             target_id: osr["targetId"]
+           }
+         end}
       _ ->
         {:error, response.body}
     end
