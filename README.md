@@ -1,6 +1,6 @@
 # OurskyClient
 
-**TODO: Add description**
+Client for interacting with the OurSky SDA API. Register at console.prod.oursky.ai
 
 ## Installation
 

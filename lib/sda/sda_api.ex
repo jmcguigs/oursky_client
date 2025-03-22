@@ -243,62 +243,82 @@ defmodule OurskyClient.Sda do
     end
   end
 
-  @doc """
-  Get observation sequence results given a target's UUID (found in tasking)
-  """
-  def get_observation_sequence_results(target_uuid) do
+  defp parse_observation_sequence_result(osr) do
+    {:ok, created_at, 0} = DateTime.from_iso8601(osr["createdAt"])
+
+    %ObservationSequenceResult{
+      id: osr["id"],
+      created_at: created_at,
+      created_by: osr["createdBy"],
+      generated_tle_line_1: osr["generatedTleLine1"],
+      generated_tle_line_2: osr["generatedTleLine2"],
+      image_sets: for(image_set <- osr["imageSets"]) do
+        %ImageSet{
+          id: image_set["id"],
+          node_id: image_set["nodeId"],
+          observation_results: for(observation_result <- image_set["observationResults"]) do
+            {:ok, timestamp, 0} = DateTime.from_iso8601(observation_result["timestamp"])
+            %ObservationResult{
+              apparent_magnitude: observation_result["apparentMagnitude"],
+              astrometric_offsets: observation_result["astrometricOffsets"],
+              bounding_box: observation_result["boundingBox"],
+              corrected_dec: observation_result["correctedDec"],
+              corrected_ra: observation_result["correctedRa"],
+              dec: observation_result["dec"],
+              distance_from_prediction: observation_result["distanceFromPrediction"],
+              features: observation_result["features"],
+              geolat: image_set["geolat"],
+              geolon: image_set["geolon"],
+              image_id: image_set["imageId"],
+              image_url: image_set["imageUrl"],
+              jpg_url: image_set["jpgUrl"],
+              ra: observation_result["ra"],
+              solar_eq_phase_angle: observation_result["solarEqPhaseAngle"],
+              solar_phase_angle: observation_result["solarPhaseAngle"],
+              timestamp: timestamp,
+              timing_accuracy: observation_result["timingAccuracy"],
+            }
+          end
+        }
+      end,
+      norad_id: osr["noradId"],
+      target_id: osr["targetId"]
+    }
+  end
+
+  def get_observation_sequence_results(target_uuid, min_epoch, max_pages \\ 100) do
+    get_all_observation_sequence_results(target_uuid, min_epoch, [], max_pages)
+  end
+
+  defp get_all_observation_sequence_results(target_uuid, after_param, acc_results, max_pages, current_page \\ 1) do
+    # Build URL with after parameter if it exists
+    url = if after_param do
+      "https://api.prod.oursky.ai/v1/observation-sequence-results?targetId=#{target_uuid}&after=#{after_param}"
+    else
+      "https://api.prod.oursky.ai/v1/observation-sequence-results?targetId=#{target_uuid}"
+    end
+
     response =
-      Req.get!("https://api.prod.oursky.ai/v1/observation-sequence-results?targetId=#{target_uuid}",
+      Req.get!(url,
         auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
       )
 
     case response.status do
       200 ->
         osrs = response.body
-        IO.inspect(osrs)
-        {:ok,
-         for osr <- osrs do
-           {:ok, created_at, 0} = DateTime.from_iso8601(osr["createdAt"])
+        parsed_results = for osr <- osrs, do: parse_observation_sequence_result(osr)
+        all_results = acc_results ++ parsed_results
 
-           %ObservationSequenceResult{
-             id: osr["id"],
-             created_at: created_at,
-             created_by: osr["createdBy"],
-             generated_tle_line_1: osr["generatedTleLine1"],
-             generated_tle_line_2: osr["generatedTleLine2"],
-             image_sets: for(image_set <- osr["imageSets"]) do
-               %ImageSet{
-                 id: image_set["id"],
-                 node_id: image_set["nodeId"],
-                 observation_results: for(observation_result <- image_set["observationResults"]) do
-                    {:ok, timestamp, 0} = DateTime.from_iso8601(observation_result["timestamp"])
-                   %ObservationResult{
-                     apparent_magnitude: observation_result["apparentMagnitude"],
-                     astrometric_offsets: observation_result["astrometricOffsets"],
-                     bounding_box: observation_result["boundingBox"],
-                     corrected_dec: observation_result["correctedDec"],
-                     corrected_ra: observation_result["correctedRa"],
-                     dec: observation_result["dec"],
-                     distance_from_prediction: observation_result["distanceFromPrediction"],
-                     features: observation_result["features"],
-                     geolat: image_set["geolat"],
-                     geolon: image_set["geolon"],
-                     image_id: image_set["imageId"],
-                     image_url: image_set["imageUrl"],
-                     jpg_url: image_set["jpgUrl"],
-                     ra: observation_result["ra"],
-                     solar_eq_phase_angle: observation_result["solarEqPhaseAngle"],
-                     solar_phase_angle: observation_result["solarPhaseAngle"],
-                     timestamp: timestamp,
-                     timing_accuracy: observation_result["timingAccuracy"],
-                   }
-                 end
-               }
-             end,
-             norad_id: osr["noradId"],
-             target_id: osr["targetId"]
-           }
-         end}
+        # Stop if we've reached the maximum number of pages or if we got no results
+        if current_page >= max_pages or osrs == [] do
+          {:ok, all_results}
+        else
+          # Extract the createdAt from the last raw result to use as the after parameter
+          last_osr = List.last(osrs)
+          last_created_at = last_osr["createdAt"]
+          # Recursively get the next page
+          get_all_observation_sequence_results(target_uuid, last_created_at, all_results, max_pages, current_page + 1)
+        end
       _ ->
         {:error, response.body}
     end

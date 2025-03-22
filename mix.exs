@@ -4,10 +4,14 @@ defmodule OurskyClient.MixProject do
   def project do
     [
       app: :oursky_client,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      package: package(),
+      description: description(),
+      name: "OurskyClient",
+      source_url: "https://github.com/jmcguigs/oursky_client"
     ]
   end
 
@@ -21,9 +25,24 @@ defmodule OurskyClient.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:req, "~> 0.5.8"}
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:req, "~> 0.5.8"},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+    ]
+  end
+
+  defp description() do
+    """
+    A client for the Oursky SDA API.
+    """
+  end
+
+  defp package() do
+    [
+      name: :oursky_client,
+      files: ["lib", "mix.exs", "README.md", "LICENSE"],
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => "https://github.com/jmcguigs/oursky_client"}
     ]
   end
 end
