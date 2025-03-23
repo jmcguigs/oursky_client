@@ -392,4 +392,36 @@ def create_target(tle_line_1, tle_line_2, name, opts \\ []) do
       {:error, response.body}
     end
   end
+
+  @doc """
+  PUT request to update a target's TLE
+  """
+  def update_target(target_uuid, tle_line_1, tle_line_2, name, opts \\ []) do
+    # use reasonable default AMR value typical of satellite payloads
+    mass = Keyword.get(opts, :mass, 100.0)
+    area = Keyword.get(opts, :area, 1.0)
+    reflection_coefficient = Keyword.get(opts, :reflection_coefficient, 0.2)
+
+    response =
+      "https://api.prod.oursky.ai/v1/satellite-target/"
+      |> Req.put!(
+        json: %{
+          targetId: target_uuid,
+          tleLine1: tle_line_1,
+          tleLine2: tle_line_2,
+          tleName: name,
+          mass: mass,
+          area: area,
+          reflectionCoefficient: reflection_coefficient
+        },
+        auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+      )
+
+    case response.status do
+      200 ->
+        {:ok, response.body}
+      _ ->
+        {:error, response.body}
+    end
+  end
 end
