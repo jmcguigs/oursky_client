@@ -3,19 +3,15 @@
 Client for interacting with the OurSky SDA API. Register at console.prod.oursky.ai
 
 ## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `oursky_client` to your list of dependencies in `mix.exs`:
+Install by adding to `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:oursky_client, "~> 0.1.0"}
+    {:oursky_client, "~> 0.1.3"}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/oursky_client>.
+Docs can be found at: https://hexdocs.pm/oursky_client/api-reference.html
 
