@@ -401,6 +401,7 @@ def create_target(tle_line_1, tle_line_2, name, opts \\ []) do
     mass = Keyword.get(opts, :mass, 100.0)
     area = Keyword.get(opts, :area, 1.0)
     reflection_coefficient = Keyword.get(opts, :reflection_coefficient, 0.2)
+    linked_target_id = Keyword.get(opts, :linked_target_id)
 
     response =
       "https://api.prod.oursky.ai/v1/satellite-target/"
@@ -412,10 +413,60 @@ def create_target(tle_line_1, tle_line_2, name, opts \\ []) do
           tleName: name,
           mass: mass,
           area: area,
-          reflectionCoefficient: reflection_coefficient
+          reflectionCoefficient: reflection_coefficient,
+          linkedSatelliteTargetId: linked_target_id
         },
         auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
       )
+
+    case response.status do
+      200 ->
+        {:ok, response.body}
+      _ ->
+        {:error, response.body}
+    end
+  end
+
+  @doc """
+  Schedule a plane scan on a target
+   - Searches a target's orbital plane in the specified angle range, centered on the target
+   - Returns a UUID for the scan
+
+  ## Parameters
+  - `target_uuid`: The UUID of the target
+  - `step_size`: The step size in degrees (default: 1.0)
+  - `half_angle_range`: The half angle range in degrees (default: 5.0) - the scan will cover this range on either side of the target
+  """
+  def schedule_plane_scan(target_uuid, step_size \\ 1.0, half_angle_range \\ 5.0) do
+    response = "https://api.prod.oursky.ai/v2/search/plane-scan"
+    |> Req.post!(
+      json: %{
+        targetId: target_uuid,
+        stepSizeDegrees: step_size,
+        plusMinusAnomalyAngleDegrees: half_angle_range
+      },
+      auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+    )
+
+    case response.status do
+      200 ->
+        {:ok, response.body["id"]}
+      _ ->
+        {:error, response.body}
+    end
+  end
+
+  @doc """
+  Cancel a plane scan given its UUID
+
+  ## Parameters
+  - `scan_uuid`: The UUID of the scan
+  """
+  def cancel_plane_scan(scan_uuid) do
+    response = "https://api.prod.oursky.ai/v2/search/plane-scan?id=#{scan_uuid}"
+    |> Req.delete!(
+      auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+    )
 
     case response.status do
       200 ->
