@@ -286,6 +286,20 @@ defmodule OurskyClient.Sda do
     }
   end
 
+  @doc """
+  Get observation sequence results for a given target UUID
+   - If you intend to receive many observations, set up webhooks on the API console.
+
+  ## Parameters
+  - `target_uuid`: The UUID of the target
+  - `min_epoch`: The minimum epoch to filter results
+  - `max_pages`: The maximum number of pages to retrieve (default: 100)
+
+  ## Examples
+
+      iex> OurskyClient.Sda.get_observation_sequence_results("c0baf754-4561-4219-a559-03f648c1208e", "2025-03-21T00:00:00Z")
+      {:ok, [%OurskyClient.Sda.ObservationSequenceResult{...}]}
+  """
   def get_observation_sequence_results(target_uuid, min_epoch, max_pages \\ 100) do
     get_all_observation_sequence_results(target_uuid, min_epoch, [], max_pages)
   end
@@ -321,6 +335,61 @@ defmodule OurskyClient.Sda do
         end
       _ ->
         {:error, response.body}
+    end
+  end
+
+  @doc """
+  Create a custom target for your organization using a two-line element set (TLE)
+
+  ## Parameters
+  - `tle_line_1`: The first line of the TLE
+  - `tle_line_2`: The second line of the TLE
+  - `name`: The name of the target
+
+  ## Options
+  - `:mass` - Mass in kg (default: 100.0)
+  - `:area` - Cross-sectional area in square meters (default: 1.0)
+  - `:reflection_coefficient` - Reflection coefficient (default: 0.2)
+  - `:linked_target_id` - UUID of linked target (default: nil)
+
+  ## Examples
+
+      iex> OurskyClient.Sda.create_target(
+      ...>   "1 25544U 98067A   25080.55743056  .00026289  00000-0  47116-3 0  9999",
+      ...>   "2 25544  51.6381  21.0488 0004053  35.5022 296.1249 15.49747147501567",
+      ...>   "ISS (ZARYA)",
+      ...>   mass: 420000.0,
+      ...>   area: 160.0
+      ...> )
+      {:ok, "6e801835-4aae-4b78-9741-f10fbab472db"}
+  """
+def create_target(tle_line_1, tle_line_2, name, opts \\ []) do
+  # use reasonable default AMR value typical of satellite payloads
+  mass = Keyword.get(opts, :mass, 100.0)
+  area = Keyword.get(opts, :area, 1.0)
+  reflection_coefficient = Keyword.get(opts, :reflection_coefficient, 0.2)
+  linked_target_id = Keyword.get(opts, :linked_target_id)
+
+  response =
+    "https://api.prod.oursky.ai/v1/satellite-target"
+    |> Req.post!(
+      json: %{
+        tleLine1: tle_line_1,
+        tleLine2: tle_line_2,
+        tleName: name,
+        mass: mass,
+        area: area,
+        reflectionCoefficient: reflection_coefficient,
+        linkedSatelliteTargetId: linked_target_id
+      },
+      auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+    )
+
+  case response.status do
+    200 ->
+      {:ok, response.body["id"]}
+    _ ->
+      {:error, response.body}
     end
   end
 end
