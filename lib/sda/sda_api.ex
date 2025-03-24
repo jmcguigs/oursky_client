@@ -194,6 +194,34 @@ defmodule OurskyClient.Sda do
   end
 
   @doc """
+  Get all targets tasked by your organization
+  """
+  def get_tasked_targets do
+    response =
+      Req.get!("https://api.prod.oursky.ai/v1/organization-targets",
+        auth: {:bearer, Application.get_env(:oursky_client, :access_token)}
+      )
+
+    case response.status do
+      200 ->
+        {:ok,
+         for target <- response.body do
+           {:ok, created_at, 0} = DateTime.from_iso8601(target["createdAt"])
+           %OrganizationTarget{
+             created_at: created_at,
+             created_by: target["createdBy"],
+             id: target["id"],
+             revisit_rate_minutes: target["revisitRateMinutes"],
+             satellite_target: parse_satellite_target(target["satelliteTarget"])
+           }
+         end}
+
+      _ ->
+        {:error, response.body}
+    end
+  end
+
+  @doc """
   Get node properties given a node's UUID (found in observation sequence results)
 
   ## Examples

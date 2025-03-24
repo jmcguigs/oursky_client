@@ -8,7 +8,7 @@ Install by adding to `mix.exs`:
 ```elixir
 def deps do
   [
-    {:oursky_client, "~> 0.1.3"}
+    {:oursky_client, "~> 0.1.4"}
   ]
 end
 ```
